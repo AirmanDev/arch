@@ -1,5 +1,12 @@
 #!/bin/bash
 
+# Check if script is being run with sudo and exit if it is
+if [ "$(id -u)" -eq 0 ]; then
+    echo "This script should not be run with sudo or as root."
+    echo "The script already contains sudo commands where necessary."
+    exit 1
+fi
+
 # Install GNOME and essential packages
 echo "Installing GNOME and essential packages..."
 sudo pacman -S gnome-session gnome-shell gdm gnome-console gnome-software gnome-backgrounds \
