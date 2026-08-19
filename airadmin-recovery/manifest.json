@@ -8,12 +8,12 @@
     "overview": "Emergency recovery helper for AirAdmin",
     "versions": [
       {
-        "checksum": "7de3887d291f1864428f59113f78c85a",
-        "changelog": "v1.1: fixed Jellyfin plugin initialization, added admin-only recovery page, encrypted one-time credential transport, localhost SSH recovery, and diagnostics.",
+        "checksum": "6b75cb4c6f73c19adc7e65597ee7e604",
+        "changelog": "v1.2: rebuilt the embedded recovery page, fixed macOS zsh USERNAME collision, and added recovery-key validation.",
         "targetAbi": "10.11.1.0",
-        "sourceUrl": "https://raw.githubusercontent.com/AirmanDev/arch/main/airadmin-recovery/release/AirAdminRecovery_1.1.0.0.zip",
-        "timestamp": "2026-08-19 13:22:12",
-        "version": "1.1.0.0"
+        "sourceUrl": "https://raw.githubusercontent.com/AirmanDev/arch/main/airadmin-recovery/release/AirAdminRecovery_1.2.0.0.zip",
+        "timestamp": "2026-08-19 14:09:57",
+        "version": "1.2.0.0"
       }
     ]
   }
