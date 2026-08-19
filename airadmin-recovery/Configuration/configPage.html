@@ -106,7 +106,7 @@
             'if ! grep -q \'BEGIN PUBLIC KEY\' "$TMPKEY"; then echo \'HIBA: érvénytelen recovery kulcs.\' >&2; exit 1; fi',
             'printf \'Linux felhasználó [%s]: \' "$DEFAULT_USER"',
             'IFS= read -r LOGIN_USER',
-            'LOGIN_USER="${LOGIN_USER:-$DEFAULT_USER}"',
+            'if [ -z "$LOGIN_USER" ]; then LOGIN_USER="$DEFAULT_USER"; fi',
             'printf \'Szerver jelszó: \'',
             'stty -echo',
             'IFS= read -r PASSWORD',
