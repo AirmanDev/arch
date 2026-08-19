@@ -3,17 +3,17 @@
     "category": "General",
     "guid": "818b83c3-d9d8-4fd6-8771-ad3bf6876156",
     "name": "AirAdmin Recovery",
-    "description": "One-shot recovery helper that attempts to start airadmin.service and logs AIRADMIN-RECOVERY diagnostics.",
+    "description": "Emergency AirAdmin recovery through encrypted credentials and localhost SSH. No password is stored in GitHub or Jellyfin configuration.",
     "owner": "AirmanDev",
     "overview": "Emergency recovery helper for AirAdmin",
     "versions": [
       {
-        "checksum": "834e20b94051d4ad02ca8cd2586d85d5",
-        "changelog": "Emergency recovery build for Jellyfin 10.11.1.",
+        "checksum": "7de3887d291f1864428f59113f78c85a",
+        "changelog": "v1.1: fixed Jellyfin plugin initialization, added admin-only recovery page, encrypted one-time credential transport, localhost SSH recovery, and diagnostics.",
         "targetAbi": "10.11.1.0",
-        "sourceUrl": "https://raw.githubusercontent.com/AirmanDev/arch/main/airadmin-recovery/release/AirAdminRecovery_1.0.0.0.zip",
-        "timestamp": "2026-08-19 12:35:51",
-        "version": "1.0.0.0"
+        "sourceUrl": "https://raw.githubusercontent.com/AirmanDev/arch/main/airadmin-recovery/release/AirAdminRecovery_1.1.0.0.zip",
+        "timestamp": "2026-08-19 13:22:12",
+        "version": "1.1.0.0"
       }
     ]
   }
