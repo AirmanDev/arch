@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="utf-8">
+    <title>AirAdmin Recovery</title>
+</head>
+<body>
+<div id="AirAdminRecoveryPage"
+     data-role="page"
+     class="page type-interior pluginConfigurationPage"
+     data-require="emby-input,emby-button">
+    <div data-role="content">
+        <div class="content-primary">
+            <h2>AirAdmin Recovery</h2>
+            <p>
+                Ez a helyreállító csak a helyi 127.0.0.1 SSH-kapcsolatot és a
+                <code>systemctl start airadmin.service</code> parancsot használja.
+                A Linux-jelszó nem kerül GitHubra és nem mentődik a Jellyfin konfigurációjába.
+            </p>
+
+            <div class="inputContainer">
+                <label class="inputLabel" for="RecoveryUsername">Linux felhasználó</label>
+                <input id="RecoveryUsername" type="text" is="emby-input" value="airserver" autocomplete="username">
+            </div>
+
+            <div style="margin: 1em 0;">
+                <button id="GenerateRecoveryCommand"
+                        is="emby-button"
+                        type="button"
+                        class="raised block emby-button">
+                    <span>Egyszer használatos Mac parancs készítése</span>
+                </button>
+            </div>
+
+            <div id="RecoveryCommandArea" style="display:none;">
+                <p>
+                    Másold az alábbi blokkot a Mac Terminalba. Ott helyben bekéri a szerver jelszavát,
+                    és csak egy titkosított karakterláncot ír ki.
+                </p>
+                <textarea id="RecoveryCommand"
+                          style="width:100%;min-height:20em;font-family:monospace;"
+                          readonly></textarea>
+
+                <p>Az utolsó, hosszú Base64 sort másold ide:</p>
+                <textarea id="EncryptedPayload"
+                          style="width:100%;min-height:7em;font-family:monospace;"
+                          placeholder="Titkosított Base64 adat"></textarea>
+
+                <div style="margin: 1em 0;">
+                    <button id="StartAirAdmin"
+                            is="emby-button"
+                            type="button"
+                            class="raised button-submit block emby-button">
+                        <span>AirAdmin indítása</span>
+                    </button>
+                </div>
+            </div>
+
+            <div style="margin-top:1em;">
+                <button id="RefreshAirAdminStatus"
+                        is="emby-button"
+                        type="button"
+                        class="raised block emby-button">
+                    <span>Állapot ellenőrzése</span>
+                </button>
+            </div>
+
+            <pre id="RecoveryStatus"
+                 style="white-space:pre-wrap;word-break:break-word;margin-top:1em;"></pre>
+        </div>
+    </div>
+
+<script type="text/javascript">
+(function () {
+    const page = document.querySelector('#AirAdminRecoveryPage');
+    const username = page.querySelector('#RecoveryUsername');
+    const commandArea = page.querySelector('#RecoveryCommandArea');
+    const commandBox = page.querySelector('#RecoveryCommand');
+    const payloadBox = page.querySelector('#EncryptedPayload');
+    const statusBox = page.querySelector('#RecoveryStatus');
+
+    function setStatus(text) {
+        statusBox.textContent = text || '';
+    }
+
+    function pemToBase64Utf8(pem) {
+        return btoa(unescape(encodeURIComponent(pem)));
+    }
+
+    function buildMacCommand(publicKeyPem, challenge, defaultUser) {
+        const pub64 = pemToBase64Utf8(publicKeyPem);
+        const safeChallenge = challenge.replace(/'/g, "'\\''");
+        const safeUser = (defaultUser || 'airserver').replace(/'/g, "'\\''");
+
+        return `PUB64='${pub64}'
+CHALLENGE='${safeChallenge}'
+DEFAULT_USER='${safeUser}'
+TMPKEY="$(mktemp)"
+cleanup() { stty echo 2>/dev/null || true; rm -f "$TMPKEY"; unset PASSWORD PAYLOAD; }
+trap cleanup EXIT INT TERM
+printf '%s' "$PUB64" | base64 -D > "$TMPKEY"
+printf 'Linux felhasználó [%s]: ' "$DEFAULT_USER"
+IFS= read -r USERNAME
+USERNAME="\${USERNAME:-$DEFAULT_USER}"
+printf 'Szerver jelszó: '
+stty -echo
+IFS= read -r PASSWORD
+stty echo
+printf '\\n'
+PAYLOAD="$(USERNAME="$USERNAME" PASSWORD="$PASSWORD" CHALLENGE="$CHALLENGE" python3 - <<'PY'
+import json, os
+print(json.dumps({
+    "username": os.environ["USERNAME"],
+    "password": os.environ["PASSWORD"],
+    "challenge": os.environ["CHALLENGE"]
+}, separators=(",", ":")))
+PY
+)"
+printf '%s' "$PAYLOAD" | openssl pkeyutl -encrypt -pubin -inkey "$TMPKEY" \
+  -pkeyopt rsa_padding_mode:oaep \
+  -pkeyopt rsa_oaep_md:sha256 \
+  -pkeyopt rsa_mgf1_md:sha256 | base64
+`;
+    }
+
+    async function refreshStatus() {
+        try {
+            const result = await ApiClient.getJSON(ApiClient.getUrl('AirAdminRecovery/Status'));
+            const state = result.state || result.State || 'unknown';
+            const diagnostics = result.diagnostics || result.Diagnostics || '';
+            setStatus('AirAdmin állapot: ' + state + '\\n' + diagnostics);
+        } catch (err) {
+            setStatus('Állapotlekérdezési hiba: ' + (err.message || err));
+        }
+    }
+
+    page.querySelector('#GenerateRecoveryCommand').addEventListener('click', async function () {
+        Dashboard.showLoadingMsg();
+        try {
+            const result = await ApiClient.getJSON(ApiClient.getUrl('AirAdminRecovery/Challenge'));
+            const publicKeyPem = result.publicKeyPem || result.PublicKeyPem;
+            const challenge = result.challenge || result.Challenge;
+
+            commandBox.value = buildMacCommand(publicKeyPem, challenge, username.value.trim() || 'airserver');
+            payloadBox.value = '';
+            commandArea.style.display = '';
+            setStatus('Az egyszer használatos kód 5 percig érvényes.');
+        } catch (err) {
+            setStatus('Nem sikerült helyreállítási kódot készíteni: ' + (err.message || err));
+        } finally {
+            Dashboard.hideLoadingMsg();
+        }
+    });
+
+    page.querySelector('#StartAirAdmin').addEventListener('click', async function () {
+        const ciphertext = payloadBox.value.replace(/\s+/g, '');
+        if (!ciphertext) {
+            setStatus('Előbb illeszd be a Terminal által kiírt Base64 sort.');
+            return;
+        }
+
+        Dashboard.showLoadingMsg();
+        try {
+            const result = await ApiClient.ajax({
+                type: 'POST',
+                url: ApiClient.getUrl('AirAdminRecovery/Start'),
+                data: JSON.stringify({ ciphertext: ciphertext }),
+                contentType: 'application/json',
+                dataType: 'json'
+            });
+
+            const success = result.success ?? result.Success;
+            const message = result.message || result.Message || '';
+            const state = result.airAdminState || result.AirAdminState || 'unknown';
+            const method = result.method || result.Method || '';
+            const details = result.details || result.Details || '';
+
+            setStatus(
+                (success ? 'SIKER\\n' : 'NEM SIKERÜLT\\n') +
+                message + '\\n' +
+                'Állapot: ' + state + '\\n' +
+                'Módszer: ' + method + '\\n' +
+                details
+            );
+        } catch (err) {
+            setStatus('Helyreállítási kérés hiba: ' + (err.message || err));
+        } finally {
+            payloadBox.value = '';
+            Dashboard.hideLoadingMsg();
+        }
+    });
+
+    page.querySelector('#RefreshAirAdminStatus').addEventListener('click', refreshStatus);
+    page.addEventListener('pageshow', refreshStatus);
+})();
+</script>
+</div>
+</body>
+</html>

@@ -6,6 +6,7 @@ on:
     paths:
       - 'airadmin-recovery/*.cs'
       - 'airadmin-recovery/*.csproj'
+      - 'airadmin-recovery/Configuration/**'
       - '.github/workflows/airadmin-recovery-build.yml'
 
 permissions:
@@ -33,34 +34,37 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          VERSION='1.1.0.0'
+          ZIP_NAME="AirAdminRecovery_${VERSION}.zip"
           mkdir -p airadmin-recovery/release build/package
+          rm -f build/package/*
           cp build/recovery/AirAdmin.Recovery.dll build/package/
-          (cd build/package && zip -9 ../../airadmin-recovery/release/AirAdminRecovery_1.0.0.0.zip AirAdmin.Recovery.dll)
+          (cd build/package && zip -9 "../../airadmin-recovery/release/${ZIP_NAME}" AirAdmin.Recovery.dll)
 
-          ZIP='airadmin-recovery/release/AirAdminRecovery_1.0.0.0.zip'
+          ZIP="airadmin-recovery/release/${ZIP_NAME}"
           MD5="$(md5sum "$ZIP" | awk '{print $1}')"
           SHA256="$(sha256sum "$ZIP" | awk '{print $1}')"
-          printf '%s  %s\n' "$SHA256" 'AirAdminRecovery_1.0.0.0.zip' > airadmin-recovery/release/AirAdminRecovery_1.0.0.0.sha256
+          printf '%s  %s\n' "$SHA256" "$ZIP_NAME" > "airadmin-recovery/release/${ZIP_NAME%.zip}.sha256"
 
-          python3 - "$MD5" <<'PY'
+          python3 - "$MD5" "$VERSION" "$ZIP_NAME" <<'PY'
           import json, sys
           from datetime import datetime, timezone
 
-          md5 = sys.argv[1]
+          md5, version, zip_name = sys.argv[1:4]
           manifest = [{
               "category": "General",
               "guid": "818b83c3-d9d8-4fd6-8771-ad3bf6876156",
               "name": "AirAdmin Recovery",
-              "description": "One-shot recovery helper that attempts to start airadmin.service and logs AIRADMIN-RECOVERY diagnostics.",
+              "description": "Emergency AirAdmin recovery through encrypted credentials and localhost SSH. No password is stored in GitHub or Jellyfin configuration.",
               "owner": "AirmanDev",
               "overview": "Emergency recovery helper for AirAdmin",
               "versions": [{
                   "checksum": md5,
-                  "changelog": "Emergency recovery build for Jellyfin 10.11.1.",
+                  "changelog": "v1.1: fixed Jellyfin plugin initialization, added admin-only recovery page, encrypted one-time credential transport, localhost SSH recovery, and diagnostics.",
                   "targetAbi": "10.11.1.0",
-                  "sourceUrl": "https://raw.githubusercontent.com/AirmanDev/arch/main/airadmin-recovery/release/AirAdminRecovery_1.0.0.0.zip",
+                  "sourceUrl": f"https://raw.githubusercontent.com/AirmanDev/arch/main/airadmin-recovery/release/{zip_name}",
                   "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
-                  "version": "1.0.0.0"
+                  "version": version
               }]
           }]
           with open('airadmin-recovery/manifest.json', 'w', encoding='utf-8') as f:
@@ -79,5 +83,5 @@ jobs:
             echo 'Release files already current.'
             exit 0
           fi
-          git commit -m 'Publish AirAdmin recovery plugin [skip ci]'
+          git commit -m 'Publish AirAdmin recovery plugin v1.1 [skip ci]'
           git push

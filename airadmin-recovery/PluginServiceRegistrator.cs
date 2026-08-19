@@ -6,8 +6,12 @@ namespace AirAdmin.Recovery;
 
 public sealed class PluginServiceRegistrator : IPluginServiceRegistrator
 {
-    public void RegisterServices(IServiceCollection serviceCollection, IServerApplicationHost applicationHost)
+    public void RegisterServices(
+        IServiceCollection serviceCollection,
+        IServerApplicationHost applicationHost)
     {
-        serviceCollection.AddHostedService<RecoveryService>();
+        serviceCollection.AddSingleton<RecoveryCryptoService>();
+        serviceCollection.AddSingleton<RecoveryExecutor>();
+        serviceCollection.AddHostedService<RecoveryDiagnosticsService>();
     }
 }
