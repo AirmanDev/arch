@@ -4,11 +4,12 @@ on:
   push:
     branches: [main]
     paths:
-      - 'airadmin-recovery/**'
+      - 'airadmin-recovery/*.cs'
+      - 'airadmin-recovery/*.csproj'
       - '.github/workflows/airadmin-recovery-build.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -28,22 +29,55 @@ jobs:
       - name: Build
         run: dotnet publish airadmin-recovery/AirAdmin.Recovery.csproj -c Release -o build/recovery --no-self-contained
 
-      - name: Package
+      - name: Package and generate manifest
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p build/package
+          mkdir -p airadmin-recovery/release build/package
           cp build/recovery/AirAdmin.Recovery.dll build/package/
-          (cd build/package && zip -9 ../AirAdminRecovery_1.0.0.0.zip AirAdmin.Recovery.dll)
-          md5sum build/AirAdminRecovery_1.0.0.0.zip | tee build/AirAdminRecovery_1.0.0.0.md5
-          sha256sum build/AirAdminRecovery_1.0.0.0.zip | tee build/AirAdminRecovery_1.0.0.0.sha256
+          (cd build/package && zip -9 ../../airadmin-recovery/release/AirAdminRecovery_1.0.0.0.zip AirAdmin.Recovery.dll)
 
-      - name: Upload recovery artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: airadmin-recovery
-          path: |
-            build/AirAdminRecovery_1.0.0.0.zip
-            build/AirAdminRecovery_1.0.0.0.md5
-            build/AirAdminRecovery_1.0.0.0.sha256
-          if-no-files-found: error
+          ZIP='airadmin-recovery/release/AirAdminRecovery_1.0.0.0.zip'
+          MD5="$(md5sum "$ZIP" | awk '{print $1}')"
+          SHA256="$(sha256sum "$ZIP" | awk '{print $1}')"
+          printf '%s  %s\n' "$SHA256" 'AirAdminRecovery_1.0.0.0.zip' > airadmin-recovery/release/AirAdminRecovery_1.0.0.0.sha256
+
+          python3 - "$MD5" <<'PY'
+          import json, sys
+          from datetime import datetime, timezone
+
+          md5 = sys.argv[1]
+          manifest = [{
+              "category": "General",
+              "guid": "818b83c3-d9d8-4fd6-8771-ad3bf6876156",
+              "name": "AirAdmin Recovery",
+              "description": "One-shot recovery helper that attempts to start airadmin.service and logs AIRADMIN-RECOVERY diagnostics.",
+              "owner": "AirmanDev",
+              "overview": "Emergency recovery helper for AirAdmin",
+              "versions": [{
+                  "checksum": md5,
+                  "changelog": "Emergency recovery build for Jellyfin 10.11.1.",
+                  "targetAbi": "10.11.1.0",
+                  "sourceUrl": "https://raw.githubusercontent.com/AirmanDev/arch/main/airadmin-recovery/release/AirAdminRecovery_1.0.0.0.zip",
+                  "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
+                  "version": "1.0.0.0"
+              }]
+          }]
+          with open('airadmin-recovery/manifest.json', 'w', encoding='utf-8') as f:
+              json.dump(manifest, f, indent=2)
+              f.write('\n')
+          PY
+
+      - name: Commit release files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add airadmin-recovery/manifest.json airadmin-recovery/release/
+          if git diff --cached --quiet; then
+            echo 'Release files already current.'
+            exit 0
+          fi
+          git commit -m 'Publish AirAdmin recovery plugin [skip ci]'
+          git push
