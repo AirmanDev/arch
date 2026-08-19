@@ -34,7 +34,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VERSION='1.1.0.0'
+          VERSION='1.2.0.0'
           ZIP_NAME="AirAdminRecovery_${VERSION}.zip"
           mkdir -p airadmin-recovery/release build/package
           rm -f build/package/*
@@ -60,7 +60,7 @@ jobs:
               "overview": "Emergency recovery helper for AirAdmin",
               "versions": [{
                   "checksum": md5,
-                  "changelog": "v1.1: fixed Jellyfin plugin initialization, added admin-only recovery page, encrypted one-time credential transport, localhost SSH recovery, and diagnostics.",
+                  "changelog": "v1.2: rebuilt the embedded recovery page, fixed macOS zsh USERNAME collision, and added recovery-key validation.",
                   "targetAbi": "10.11.1.0",
                   "sourceUrl": f"https://raw.githubusercontent.com/AirmanDev/arch/main/airadmin-recovery/release/{zip_name}",
                   "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
@@ -83,5 +83,5 @@ jobs:
             echo 'Release files already current.'
             exit 0
           fi
-          git commit -m 'Publish AirAdmin recovery plugin v1.1 [skip ci]'
+          git commit -m 'Publish AirAdmin recovery plugin v1.2 [skip ci]'
           git push

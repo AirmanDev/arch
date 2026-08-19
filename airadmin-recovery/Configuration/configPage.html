@@ -87,40 +87,45 @@
         return btoa(unescape(encodeURIComponent(pem)));
     }
 
+    function shellSingleQuote(value) {
+        return "'" + String(value).replace(/'/g, "'\\''") + "'";
+    }
+
     function buildMacCommand(publicKeyPem, challenge, defaultUser) {
         const pub64 = pemToBase64Utf8(publicKeyPem);
-        const safeChallenge = challenge.replace(/'/g, "'\\''");
-        const safeUser = (defaultUser || 'airserver').replace(/'/g, "'\\''");
+        const user = defaultUser || 'airserver';
 
-        return `PUB64='${pub64}'
-CHALLENGE='${safeChallenge}'
-DEFAULT_USER='${safeUser}'
-TMPKEY="$(mktemp)"
-cleanup() { stty echo 2>/dev/null || true; rm -f "$TMPKEY"; unset PASSWORD PAYLOAD; }
-trap cleanup EXIT INT TERM
-printf '%s' "$PUB64" | base64 -D > "$TMPKEY"
-printf 'Linux felhasználó [%s]: ' "$DEFAULT_USER"
-IFS= read -r USERNAME
-USERNAME="\${USERNAME:-$DEFAULT_USER}"
-printf 'Szerver jelszó: '
-stty -echo
-IFS= read -r PASSWORD
-stty echo
-printf '\\n'
-PAYLOAD="$(USERNAME="$USERNAME" PASSWORD="$PASSWORD" CHALLENGE="$CHALLENGE" python3 - <<'PY'
-import json, os
-print(json.dumps({
-    "username": os.environ["USERNAME"],
-    "password": os.environ["PASSWORD"],
-    "challenge": os.environ["CHALLENGE"]
-}, separators=(",", ":")))
-PY
-)"
-printf '%s' "$PAYLOAD" | openssl pkeyutl -encrypt -pubin -inkey "$TMPKEY" \
-  -pkeyopt rsa_padding_mode:oaep \
-  -pkeyopt rsa_oaep_md:sha256 \
-  -pkeyopt rsa_mgf1_md:sha256 | base64
-`;
+        return [
+            'PUB64=' + shellSingleQuote(pub64),
+            'CHALLENGE=' + shellSingleQuote(challenge),
+            'DEFAULT_USER=' + shellSingleQuote(user),
+            'TMPKEY="$(mktemp)"',
+            'cleanup() { stty echo 2>/dev/null || true; rm -f "$TMPKEY"; unset PASSWORD PAYLOAD; }',
+            'trap cleanup EXIT INT TERM',
+            'printf \'%s\' "$PUB64" | base64 -D > "$TMPKEY"',
+            'if ! grep -q \'BEGIN PUBLIC KEY\' "$TMPKEY"; then echo \'HIBA: érvénytelen recovery kulcs.\' >&2; exit 1; fi',
+            'printf \'Linux felhasználó [%s]: \' "$DEFAULT_USER"',
+            'IFS= read -r LOGIN_USER',
+            'LOGIN_USER="${LOGIN_USER:-$DEFAULT_USER}"',
+            'printf \'Szerver jelszó: \'',
+            'stty -echo',
+            'IFS= read -r PASSWORD',
+            'stty echo',
+            'printf \'\\n\'',
+            'PAYLOAD="$(LOGIN_USER="$LOGIN_USER" PASSWORD="$PASSWORD" CHALLENGE="$CHALLENGE" python3 - <<\'PY\'',
+            'import json, os',
+            'print(json.dumps({',
+            '    "username": os.environ["LOGIN_USER"],',
+            '    "password": os.environ["PASSWORD"],',
+            '    "challenge": os.environ["CHALLENGE"]',
+            '}, separators=(",", ":")))',
+            'PY',
+            ')"',
+            'printf \'%s\' "$PAYLOAD" | openssl pkeyutl -encrypt -pubin -inkey "$TMPKEY" \\',
+            '  -pkeyopt rsa_padding_mode:oaep \\',
+            '  -pkeyopt rsa_oaep_md:sha256 \\',
+            '  -pkeyopt rsa_mgf1_md:sha256 | base64'
+        ].join('\n') + '\n';
     }
 
     async function refreshStatus() {
@@ -128,7 +133,7 @@ printf '%s' "$PAYLOAD" | openssl pkeyutl -encrypt -pubin -inkey "$TMPKEY" \
             const result = await ApiClient.getJSON(ApiClient.getUrl('AirAdminRecovery/Status'));
             const state = result.state || result.State || 'unknown';
             const diagnostics = result.diagnostics || result.Diagnostics || '';
-            setStatus('AirAdmin állapot: ' + state + '\\n' + diagnostics);
+            setStatus('AirAdmin állapot: ' + state + '\n' + diagnostics);
         } catch (err) {
             setStatus('Állapotlekérdezési hiba: ' + (err.message || err));
         }
@@ -140,6 +145,10 @@ printf '%s' "$PAYLOAD" | openssl pkeyutl -encrypt -pubin -inkey "$TMPKEY" \
             const result = await ApiClient.getJSON(ApiClient.getUrl('AirAdminRecovery/Challenge'));
             const publicKeyPem = result.publicKeyPem || result.PublicKeyPem;
             const challenge = result.challenge || result.Challenge;
+
+            if (!publicKeyPem || !challenge) {
+                throw new Error('A szerver nem adott érvényes recovery kulcsot.');
+            }
 
             commandBox.value = buildMacCommand(publicKeyPem, challenge, username.value.trim() || 'airserver');
             payloadBox.value = '';
@@ -176,10 +185,10 @@ printf '%s' "$PAYLOAD" | openssl pkeyutl -encrypt -pubin -inkey "$TMPKEY" \
             const details = result.details || result.Details || '';
 
             setStatus(
-                (success ? 'SIKER\\n' : 'NEM SIKERÜLT\\n') +
-                message + '\\n' +
-                'Állapot: ' + state + '\\n' +
-                'Módszer: ' + method + '\\n' +
+                (success ? 'SIKER\n' : 'NEM SIKERÜLT\n') +
+                message + '\n' +
+                'Állapot: ' + state + '\n' +
+                'Módszer: ' + method + '\n' +
                 details
             );
         } catch (err) {
